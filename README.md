@@ -2,7 +2,7 @@
 Sketching Quantifiable Units Interactively; Great Graphing System
 
 ### Requirements
-`uv`
+`uv` - automatically manages all dependencies
 
 ### Installation
 

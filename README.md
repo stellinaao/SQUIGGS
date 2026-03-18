@@ -11,3 +11,9 @@ git clone https://github.com/stellinaao/SQUIGGS.git
 cd SQUIGGS
 uv sync
 ```
+
+### Contributers
+```
+pre-commit install
+pre-commit run --all-files
+```

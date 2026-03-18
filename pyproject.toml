@@ -15,6 +15,7 @@ dependencies = [
     "pandas>=3.0.1",
     "scipy>=1.17.1",
     "tqdm>=4.67.3",
+    "pre-commit>=3.3.3",
 ]
 
 [build-system]

@@ -9,12 +9,17 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "damn @ git+https://github.com/mdmelin/DAMN.git@main",
     "matplotlib>=3.10.8",
     "numpy>=2.4.2",
     "pandas>=3.0.1",
     "scipy>=1.17.1",
+    "tqdm>=4.67.3",
 ]
 
 [build-system]
 requires = ["uv_build>=0.10.7,<0.11.0"]
 build-backend = "uv_build"
+
+[tool.uv.sources]
+damn = { git = "https://github.com/mdmelin/DAMN.git", branch = "main" }

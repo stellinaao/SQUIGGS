@@ -119,7 +119,7 @@ class PETHRenderer:
             self.ymax_g += padding
 
         self.times, _, _ = construct_timebins(pres, posts, binwidth_s)
-        self.times = np.arange(peth.shape[2])
+        # self.times = np.arange(peth.shape[2])
 
         self.save_subdir = save_subdir
 

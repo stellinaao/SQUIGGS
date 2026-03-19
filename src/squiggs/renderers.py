@@ -12,7 +12,7 @@ Python Version: >= 3.10.4
 """
 
 import numpy as np
-from DAMN.damn.alignment import construct_timebins
+from damn.alignment import construct_timebins
 from scipy.stats import sem
 
 # __all__ = ["PethRenderer", "FitRenderer", "KernelRenderer"]

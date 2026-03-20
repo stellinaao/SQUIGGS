@@ -45,16 +45,21 @@ class NeuronViewer:
         self.save_dir.mkdir(parents=True, exist_ok=True)
         mpl.rcParams["keymap.save"] = []
 
-        if ncols == 1 and nrows == 1:
-            self.fig, self.axes = plt.subplots(figsize=(3, 3))
-            self.axes = [self.axes]
-        else:
-            self.fig, self.axes = plt.subplots(
-                ncols=ncols,
-                nrows=nrows,
-                figsize=(2.5 * ncols, 2.5 * nrows),
-                sharey=True,
-            )
+        if hasattr(self.render_func, "ncols"):
+            ncols = self.render_func.ncols
+        if hasattr(self.render_func, "nrows"):
+            nrows = self.render_func.nrows
+        sharey = (
+            self.render_func.sharey if hasattr(self.render_func, "sharey") else False
+        )
+
+        self.fig, self.axes = plt.subplots(
+            ncols=ncols,
+            nrows=nrows,
+            figsize=(2.5 * ncols, 2.5 * nrows),
+            sharey=sharey,
+            squeeze=False,  # make logic same for 1 subfig too
+        )
 
         self.fig.subplots_adjust(
             left=0.2,

@@ -7,108 +7,144 @@ with a NeuronViewer() object.
 
 Author: Stellina X. Ao
 Created: 2026-02-26
-Last Modified: 2026-02-27
+Last Modified: 2026-03-19
 Python Version: >= 3.10.4
 """
 
 import numpy as np
 from damn.alignment import construct_timebins
+from spks.viz import plot_event_based_raster_fast
 from scipy.stats import sem
+import pandas as pd
 
 # __all__ = ["PethRenderer", "FitRenderer", "KernelRenderer"]
+
+
+class RasterRenderer:
+    def __init__(
+        self,
+        event_times: dict | list | pd.Series = None,
+        spike_times: list = None,
+        key: str = None,
+        pres: float = 1,
+        posts: float = 2,
+        save_subdir="raster",
+    ):
+        self.event_times_type = type(event_times)
+        if self.event_times_type is list and not np.ndim(event_times) == 1:
+            raise ValueError(
+                "there are more than one event time conditions, which is incompatible with the list format. try a dict instead."
+            )
+        self.event_times = event_times
+        self.spike_times = spike_times
+
+        self.keys = self.event_times.keys() if self.event_times_type is dict else [key]
+        self.pres = pres
+        self.posts = posts
+
+        self.ncols = len(self.event_times) if self.event_times_type is dict else 1
+        self.nrows = 1
+        self.sharey = False
+
+        self.save_subdir = save_subdir
+
+    def __call__(self, idx, fig, axes):
+        for i, (ax, key) in enumerate(zip(axes.flat, self.keys)):
+            ax.clear()
+            event_times = (
+                self.event_times[key]
+                if self.event_times_type is dict
+                else self.event_times
+            )
+            plot_event_based_raster_fast(
+                event_times,
+                self.spike_times[idx],
+                pre_seconds=self.pres,
+                post_seconds=self.posts,
+                ax=ax,
+            )
+            if key is None:
+                ax.set_title(f"Unit {idx}")
+            else:
+                ax.set_title(f"{key}, Unit {idx}")
 
 
 class PETHRenderer:
     def __init__(
         self,
-        peth=None,
-        pres=1,
-        posts=2,
-        binwidth_s=0.1,
-        peth_a=None,
-        peth_b=None,
-        color="#261B49",
-        color_a="#29723E",
-        color_b="#9F5DBC",
-        mode="grand",
-        label_a="",
-        label_b="",
-        do_sem=True,
-        relim=True,
+        peths: dict = None,
+        pres: float = 1,
+        posts: float = 2,
+        binwidth_s: float = 0.1,
+        colors: list = [
+            "#29723E",
+            "#9F5DBC",
+            "#A33434",
+            "#C49B2C",
+            "#245AA0",
+            "#E67418",
+        ],
+        do_sem: bool = True,
+        relim: bool = True,
         save_subdir="peth",
     ):
         """
         Parameters
         ----------
-        mode : "grand" or "cond"
-            grand -> single mean/std
-            cond  -> separate a/b condition mean/std
+        peths = {'cond1': peths_cond1 (shape=(n_units, n_trials, n_bins)),
+                    ...,
+                 'condN': peths_condN (shape=identical to cond1)
+                 }
 
         Example
         ----------
-        >> renderer_grand = PETHRenderer(peth, pres, posts, binwidth_s, mode="grand")
-        >> viewer1 = NeuronViewer(num_units=peth.shape[0], render_func=renderer_grand, ymin=renderer_grand.ymin, ymax=renderer_grand.ymax)
+        >> psths_cond = {
+            "left_corr": psths[left_corr_mask],
+            "right_corr": psths[right_corr_mask],
+            "left_incorr": psths[left_incorr_mask],
+            "right_incorr": psths[right_incorr_mask],
+        }
 
-
-        >> renderer_cond = PETHRenderer(
-            peth_a=peth_l,
-            peth_b=peth_r,
-            mode="cond",
-            label_a="left",
-            label_b="right"
+        >> renderer = PETHRenderer(
+            peths=psths_cond,
+            pres=tpre,
+            posts=tpost,
+            binwidth_s=binwidth_ms/1000,
         )
-        >> viewer2 = NeuronViewer(num_units=peth.shape[0], render_func=renderer_cond, ymin=renderer_cond.ymin, ymax=renderer_cond.ymax)
+
+        >> nv = NeuronViewer(num_units=psths['ACC'].shape[0], render_func=renderer)
         """
 
-        self.mode = mode
+        self.peths = peths
 
-        if self.mode == "grand":
-            self.peth = peth
+        # ensure that the same number of cells are present for each condition
+        assert len(np.unique([v.shape[0] for v in self.peths.values()])) == 1, (
+            "number of cells in each condition should be the same, but are not"
+        )
 
-            self.all_means = self.peth.mean(axis=1)
-            self.all_stds = sem(self.peth, axis=1) if do_sem else self.peth.std(axis=1)
+        # ensure that there are enough colors
+        assert len(self.peths) <= len(colors), (
+            "not enough colors to support number of conditions"
+        )
+        self.all_means = {k: v.mean(axis=1) for k, v in peths.items()}
+        self.all_stds = {
+            k: sem(v, axis=1) if do_sem else v.std(axis=1) for k, v in peths.items()
+        }
 
-            self.ymin = np.min(self.all_means - self.all_stds, axis=1)
-            self.ymax = np.max(self.all_means + self.all_stds, axis=1)
-
-            self.color = color
-
-        elif self.mode == "cond":
-            self.peth_a = peth_a
-            self.peth_b = peth_b
-
-            self.label_a = label_a
-            self.label_b = label_b
-
-            self.all_means_a = self.peth_a.mean(axis=1)
-            self.all_means_b = self.peth_b.mean(axis=1)
-            self.all_stds_a = (
-                sem(self.peth_a, axis=1) if do_sem else self.peth_a.std(axis=1)
-            )
-            self.all_stds_b = (
-                sem(self.peth_b, axis=1) if do_sem else self.peth_b.std(axis=1)
-            )
-
-            self.ymin = np.min(
-                (
-                    np.min(self.all_means_a - self.all_stds_a, axis=1),
-                    np.min(self.all_means_b - self.all_stds_b, axis=1),
-                ),
-                axis=0,
-            )
-            self.ymax = np.max(
-                (
-                    np.max(self.all_means_a + self.all_stds_a, axis=1),
-                    np.max(self.all_means_b + self.all_stds_b, axis=1),
-                ),
-                axis=0,
-            )
-
-            self.color_a = color_a
-            self.color_b = color_b
-
-        else:
-            raise NotImplementedError("Valid modes are 'grand' and 'cond.'")
+        self.ymin = np.min(
+            [
+                np.min(self.all_means[k] - self.all_stds[k], axis=1)
+                for k in peths.keys()
+            ],
+            axis=0,
+        )
+        self.ymax = np.max(
+            [
+                np.max(self.all_means[k] + self.all_stds[k], axis=1)
+                for k in peths.keys()
+            ],
+            axis=0,
+        )
 
         self.relim = relim
         if not self.relim:
@@ -118,50 +154,29 @@ class PETHRenderer:
             self.ymin_g -= padding
             self.ymax_g += padding
 
+        self.colors = colors
         self.times, _, _ = construct_timebins(pres, posts, binwidth_s)
-        # self.times = np.arange(peth.shape[2])
 
         self.save_subdir = save_subdir
 
     def __call__(self, idx, fig, axes):
-        ax = axes[0]
+        ax = axes[0][0]
         ax.clear()
-        if self.mode == "grand":
-            mean = self.all_means[idx]
-            std = self.all_stds[idx]
-            ax.plot(self.times, mean, color=self.color)
-            ax.fill_between(
-                self.times, mean - std, mean + std, alpha=0.3, color=self.color
-            )
 
-            ax.axvline(x=0, color="#666666", linewidth=0.5, linestyle="--")
-        elif self.mode == "cond":
-            mean_a = self.all_means_a[idx]
-            std_a = self.all_stds_a[idx]
-            mean_b = self.all_means_b[idx]
-            std_b = self.all_stds_b[idx]
-
-            ax.plot(self.times, mean_a, color=self.color_a, label=self.label_a)
-            ax.plot(self.times, mean_b, color=self.color_b, label=self.label_b)
+        for i, k in enumerate(self.peths.keys()):
+            mean = self.all_means[k][idx]
+            std = self.all_stds[k][idx]
+            ax.plot(self.times, mean, color=self.colors[i], label=k)
             ax.fill_between(
                 self.times,
-                mean_a - std_a,
-                mean_a + std_a,
+                mean - std,
+                mean + std,
                 alpha=0.3,
-                color=self.color_a,
-            )
-            ax.fill_between(
-                self.times,
-                mean_b - std_b,
-                mean_b + std_b,
-                alpha=0.3,
-                color=self.color_b,
+                color=self.colors[i],
             )
 
-            ax.axvline(x=0, color="#666666", linewidth=0.5, linestyle="--")
-            ax.legend()
-        else:
-            raise ValueError("Mode must be 'grand' or 'cond'.")
+        ax.axvline(x=0, color="#666666", linewidth=0.5, linestyle="--")
+        ax.legend()
 
         if self.relim:
             padding = 0.05 * (self.ymax[idx] - self.ymin[idx])
@@ -269,6 +284,8 @@ class KernelRenderer:
                     self.cache[tag][f"{reg}_k"][idx] = k
         self.ymin = ymin
         self.ymax = ymax
+
+        self.sharey = True
 
         self.subdir = subdir
 

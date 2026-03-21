@@ -17,7 +17,52 @@ from spks.viz import plot_event_based_raster_fast
 from scipy.stats import sem
 import pandas as pd
 
-# __all__ = ["PethRenderer", "FitRenderer", "KernelRenderer"]
+__all__ = [
+    "PETHRasterRenderer",
+    "RasterRenderer",
+    "PETHRenderer",
+    "FitRenderer",
+    "KernelRenderer",
+]
+
+
+class PETHRasterRenderer:
+    def __init__(
+        self,
+        event_times: dict | list | pd.Series = None,
+        spike_times: list = None,
+        peths: dict = None,
+        key: str = None,
+        pres: float = 1,
+        posts: float = 2,
+        binwidth_s: float = 0.1,
+        colors: list = [
+            "#29723E",
+            "#9F5DBC",
+            "#A33434",
+            "#C49B2C",
+            "#245AA0",
+            "#E67418",
+        ],
+        do_sem: bool = True,
+        relim: bool = True,
+        save_subdir="peth_raster",
+    ):
+        self.raster_renderer = RasterRenderer(
+            event_times, spike_times, key, pres, posts, save_subdir
+        )
+        self.peth_renderer = PETHRenderer(
+            peths, pres, posts, binwidth_s, colors, do_sem, relim, save_subdir
+        )
+
+        self.ncols = self.raster_renderer.ncols + 1
+        self.nrows = self.raster_renderer.nrows
+        self.sharey = self.raster_renderer.sharey
+        self.save_subdir = save_subdir
+
+    def __call__(self, idx, fig, axes):
+        self.raster_renderer(idx, fig, axes[:, :-1])
+        self.peth_renderer(idx, fig, axes[:, -1])
 
 
 class RasterRenderer:
@@ -160,7 +205,11 @@ class PETHRenderer:
         self.save_subdir = save_subdir
 
     def __call__(self, idx, fig, axes):
-        ax = axes[0][0]
+        ax = (
+            axes[0][0]
+            if np.ndim(axes) > 1
+            else (axes[0] if np.ndim(axes) > 0 else axes)
+        )
         ax.clear()
 
         for i, k in enumerate(self.peths.keys()):

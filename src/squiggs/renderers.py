@@ -35,8 +35,8 @@ class PETHRasterRenderer:
         key: str = None,
         pres: float = 1,
         posts: float = 2,
-        binwidth_s: float = 0.1,
-        s: float = 0.5,
+        binwidth_s: float = 1,
+        s: float = 1,
         linewidths: float = 0.5,
         colors: list = [
             "#29723E",
@@ -51,7 +51,7 @@ class PETHRasterRenderer:
         save_subdir="peth_raster",
     ):
         self.raster_renderer = RasterRenderer(
-            event_times, spike_times, key, pres, posts, save_subdir
+            event_times, spike_times, key, pres, posts, s, linewidths, save_subdir
         )
         self.peth_renderer = PETHRenderer(
             peths, pres, posts, binwidth_s, colors, do_sem, relim, save_subdir

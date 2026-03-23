@@ -36,6 +36,8 @@ class PETHRasterRenderer:
         pres: float = 1,
         posts: float = 2,
         binwidth_s: float = 0.1,
+        s: float = 0.5,
+        linewidths: float = 0.5,
         colors: list = [
             "#29723E",
             "#9F5DBC",
@@ -73,6 +75,8 @@ class RasterRenderer:
         key: str = None,
         pres: float = 1,
         posts: float = 2,
+        s: float = 0.5,
+        linewidths: float = 0.5,
         save_subdir="raster",
     ):
         self.event_times_type = type(event_times)
@@ -86,6 +90,9 @@ class RasterRenderer:
         self.keys = self.event_times.keys() if self.event_times_type is dict else [key]
         self.pres = pres
         self.posts = posts
+
+        self.s = s
+        self.linewidths = linewidths
 
         self.ncols = len(self.event_times) if self.event_times_type is dict else 1
         self.nrows = 1
@@ -106,6 +113,8 @@ class RasterRenderer:
                 self.spike_times[idx],
                 pre_seconds=self.pres,
                 post_seconds=self.posts,
+                s=self.s,
+                linewidths=self.linewidths,
                 ax=ax,
             )
             if key is None:

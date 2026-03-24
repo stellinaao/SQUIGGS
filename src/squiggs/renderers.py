@@ -265,10 +265,13 @@ class FitRenderer:
         self.save_subdir = save_subdir
 
     def __call__(self, idx, fig, axes):
-        for ax in axes:
-            ax.clear()
+        ax = (
+            axes[0][0]
+            if np.ndim(axes) > 1
+            else (axes[0] if np.ndim(axes) > 0 else axes)
+        )
+        ax.clear()
 
-        ax = axes[0]
         ax.plot(self.y[:, idx], color="#666666", alpha=0.5, label="observed")
         ax.plot(self.yhat[:, idx], color="#5C2392", alpha=0.5, label="predicted")
 
@@ -353,8 +356,12 @@ class KernelRenderer:
         self.subdir = subdir
 
     def __call__(self, idx, fig, axes):
-        for ax in axes:
-            ax.clear()
+        ax = (
+            axes[0][0]
+            if np.ndim(axes) > 1
+            else (axes[0] if np.ndim(axes) > 0 else axes)
+        )
+        ax.clear()
 
         for i, tag in enumerate(self.all_tags):
             regs = self.dmat.select(tag=tag)

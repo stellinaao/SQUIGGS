@@ -180,9 +180,14 @@ class PETHRenderer:
         assert len(self.peths) <= len(colors), (
             "not enough colors to support number of conditions"
         )
-        self.all_means = {k: v.mean(axis=1) for k, v in peths.items()}
+        self.all_means = {
+            k: ((1 / binwidth_s) * v).mean(axis=1) for k, v in peths.items()
+        }
         self.all_stds = {
-            k: sem(v, axis=1) if do_sem else v.std(axis=1) for k, v in peths.items()
+            k: sem((1 / binwidth_s) * v, axis=1)
+            if do_sem
+            else ((1 / binwidth_s) * v).std(axis=1)
+            for k, v in peths.items()
         }
 
         self.ymin = np.min(

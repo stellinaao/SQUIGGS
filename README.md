@@ -1,5 +1,5 @@
 # SQUIGGS
-Sketching Quantifiable Units Interactively; Great Graphing System
+Sketching Quantifiable (or, Qabalistic, Quality, Questionable, Quintessential, Quizzical, Quotidian) Units Interactively; Great Graphing System
 
 ### Requirements
 `uv` - automatically manages all dependencies

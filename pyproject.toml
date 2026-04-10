@@ -23,7 +23,7 @@ requires = ["uv_build>=0.10.7,<0.11.0"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
-damn = { git = "https://github.com/mdmelin/DAMN.git", branch = "main" }
+damn = { git = "https://github.com/mdmelin/DAMN.git" }
 spks = { git = "https://github.com/spkware/spks.git" }
 
 [dependency-groups]

@@ -246,7 +246,7 @@ wheels = [
 [[package]]
 name = "damn"
 version = "0.0.0"
-source = { git = "https://github.com/mdmelin/DAMN.git?branch=main#4ade72b8925f8539904d16c73bb2ad69abd4b306" }
+source = { git = "https://github.com/mdmelin/DAMN.git#664d8f883671eb994f8df09ee540caf9da903f6b" }
 dependencies = [
     { name = "numpy" },
 ]
@@ -1706,7 +1706,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "damn", git = "https://github.com/mdmelin/DAMN.git?branch=main" },
+    { name = "damn", git = "https://github.com/mdmelin/DAMN.git" },
     { name = "matplotlib", specifier = ">=3.10.8" },
     { name = "numpy", specifier = ">=2.4.2" },
     { name = "pandas", specifier = ">=3.0.1" },

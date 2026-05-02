@@ -253,16 +253,30 @@ class PETHRenderer:
 
 
 class FitRenderer:
-    def __init__(self, model=None, x=None, y=None, save_subdir="model_fits"):
+    def __init__(self, model=None, x=None, y=None, dfs=None, save_subdir="model_fits"):
         from scipy.stats import pearsonr as r
 
         self.model = model
         self.x = x
         self.y = y
         self.yhat = self.model(self.x).detach().numpy()
-        self.rsquared = r(self.y, self.yhat, axis=0).statistic ** 2
+
+        # dfs supports masking (mostly specific to stellina's lvm but could be adapted)
+        self.dfs = np.ones(y.shape) if dfs is None else dfs
+
+        self.rsquared = self.get_r2(self.y, self.yhat, self.dfs)
 
         self.save_subdir = save_subdir
+
+    def get_r2(self, y, yhat, dfs, eps=1e-10):
+        ybar = (y * dfs).sum(axis=0) / dfs.sum(axis=0)  # the average y value
+        resids = y - yhat  # the difference between observed and predicted
+        residnull = y - ybar  # the difference between observed and observed avg
+        sstot = np.sum(residnull**2 * dfs, axis=0) + eps  # denom
+        ssres = np.sum(resids**2 * dfs, axis=0)  # num
+        r2 = 1 - ssres / sstot
+
+        return r2
 
     def __call__(self, idx, fig, axes):
         ax = (

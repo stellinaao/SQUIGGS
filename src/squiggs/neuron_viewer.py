@@ -130,8 +130,8 @@ class NeuronViewer:
         idx = int(self.slider.val)
         filename = self.save_dir / f"unit_{idx:03d}.png"
         self.fig.savefig(filename, dpi=300, bbox_inches="tight")
-        print(f"Saved {filename}")
-
+        filename = self.save_dir / f"unit_{idx:03d}.svg"
+        self.fig.savefig(filename, dpi=300, bbox_inches="tight")
 
 """
 class NeuronViewerQT(QWidget):

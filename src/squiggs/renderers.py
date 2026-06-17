@@ -117,11 +117,211 @@ class RasterRenderer:
                 linewidths=self.linewidths,
                 ax=ax,
             )
+            ax.set_ylabel("Trials")
+            ax.set_xlim([-self.pres, self.posts])
+            ax.set_ylim([0, len(self.event_times[key])])
             if key is None:
                 ax.set_title(f"Unit {idx}")
             else:
                 ax.set_title(f"{key}, Unit {idx}")
 
+class PETHWeightCompRenderer:
+    def __init__(
+            self,
+            weights: dict = None,
+            weight_names: list = None,
+            robs: dict = None,
+            sc_tavgs: dict = None,
+            event_times: dict = None,
+            spike_times: list = None,
+            peths: dict = None,
+            key: str = None,
+            pres: float = 0.5,
+            posts: float = 1,
+            binwidth_s: float = 25/1000,
+            s: float = 1,
+            linewidths: float = 0.5,
+            colors: list = [
+                "#29723E",
+                "#9F5DBC",
+                "#A33434",
+                "#C49B2C",
+                "#245AA0",
+                "#E67418",
+            ],
+            do_sem: bool = True,
+            relim: bool = True,
+            save_subdir="peth_weights_comp",
+    ):
+        self.peth_weight_renderers = []
+        for key in weights.keys():
+            self.peth_weight_renderers.append(
+                PETHWeightRenderer(
+                    weights=weights[key],
+                    weight_names=weight_names,
+                    robs=robs[key],
+                    sc_tavg=sc_tavgs[key],
+                    event_times=event_times[key],
+                    spike_times=spike_times, 
+                    peths=peths[key],
+                    key=key,
+                    pres=pres,
+                    posts=posts,
+                    binwidth_s=binwidth_s,
+                    s=s,
+                    linewidths=linewidths,
+                    colors=colors,
+                    do_sem=do_sem,
+                    relim=relim,
+                    save_subdir=save_subdir
+
+                )
+            )
+        
+        self.nrows=len(self.peth_weight_renderers)
+        self.ncols=self.peth_weight_renderers[0].ncols
+        self.sharey = False
+        self.save_subdir = save_subdir
+    def __call__(self, idx, fig, axes):
+        for i, r in enumerate(self.peth_weight_renderers):
+            r(idx, fig, axes[i])
+        
+class PETHWeightRenderer:
+    def __init__(
+        self,
+        weights,
+        weight_names,
+        robs,
+        sc_tavg,
+        event_times: dict | list | pd.Series = None,
+        spike_times: list = None,
+        peths: dict = None,
+        key: str = None,
+        pres: float = 1,
+        posts: float = 2,
+        binwidth_s: float = 1,
+        s: float = 1,
+        linewidths: float = 0.5,
+        colors: list = [
+            "#29723E",
+            "#9F5DBC",
+            "#A33434",
+            "#C49B2C",
+            "#245AA0",
+            "#E67418",
+        ],
+        do_sem: bool = True,
+        relim: bool = True,
+        save_subdir="peth_weights",
+    ):
+        self.weight_renderer = WeightRenderer(
+            weights, weight_names, save_subdir
+        )
+
+        self.robs_renderer = ROBSRenderer(
+            robs, save_subdir
+        )
+
+        self.sctavg_renderer = SCTAVGRenderer(
+            sc_tavg
+        )
+
+        self.peth_renderer = PETHRenderer(
+            peths, pres, posts, binwidth_s, colors, do_sem, relim, save_subdir
+        )
+
+        self.raster_renderer = RasterRenderer(
+            event_times, spike_times, key, pres, posts, s, linewidths, save_subdir
+        )
+
+        self.ncols = 6
+        self.nrows = 1
+        self.sharey = False
+        self.save_subdir = save_subdir
+
+    def __call__(self, idx, fig, axes):
+        self.weight_renderer(idx, fig, axes[0])
+        self.robs_renderer(idx, fig, axes[2])
+        self.sctavg_renderer(idx, fig, axes[1])
+        self.peth_renderer(idx, fig, axes[3])
+        self.raster_renderer(idx, fig, axes[-2:])
+        '''
+        self.weight_renderer(idx, fig, axes[:, 0])
+        self.robs_renderer(idx, fig, axes[:, 2])
+        self.sctavg_renderer(idx, fig, axes[:, 1])
+        self.peth_renderer(idx, fig, axes[:, 3])
+        self.raster_renderer(idx, fig, axes[:, -2:])
+        '''
+    
+class WeightRenderer:
+    def __init__(
+            self,
+            weights,
+            weight_names,
+            save_subdir="weights",
+    ):
+        self.weights = weights
+        self.weight_names = weight_names
+        self.save_subdir = save_subdir
+    
+    def __call__(self, idx, fig, axes):
+        ax = (
+            axes[0][0]
+            if np.ndim(axes) > 1
+            else (axes[0] if np.ndim(axes) > 0 else axes)
+        )
+        ax.clear()
+
+        im = ax.imshow(self.weights[idx].reshape(-1,1), vmin=-1.5, vmax=1.5, cmap='coolwarm')
+        ax.set_xticks([])
+        ax.set_yticks(np.arange(self.weights.shape[1]), self.weight_names)
+        # fig.colorbar(im, label=r'$\beta$ weight')
+    
+class SCTAVGRenderer:
+    def __init__(
+            self,
+            sc_tavg,
+            save_subdir="sctavg"
+    ):
+        self.sc_tavg = sc_tavg
+        self.keys = sc_tavg.keys()
+        self.save_subdir = save_subdir
+    
+        self.ymin = min([min(sc_tavg[k]) for k in self.keys])
+        self.ymax = max([max(sc_tavg[k]) for k in self.keys])
+
+    def __call__(self, idx, fig, axes):
+        ax = (
+            axes[0][0]
+            if np.ndim(axes) > 1
+            else (axes[0] if np.ndim(axes) > 0 else axes)
+        )
+        ax.clear()
+
+        ax.bar(self.keys, [self.sc_tavg[k][idx] for k in self.keys])
+        ax.set_ylim([self.ymin, self.ymax])
+        ax.set_ylabel(r"avg spike counts $^*$")
+
+class ROBSRenderer:
+    def __init__(
+            self,
+            robs,
+            save_subdir="robs",
+    ):
+        self.robs = robs
+        self.save_subdir=save_subdir
+
+    def __call__(self, idx, fig, axes):
+        ax = (
+            axes[0][0]
+            if np.ndim(axes) > 1
+            else (axes[0] if np.ndim(axes) > 0 else axes)
+        )
+        ax.clear()
+
+        ax.plot(self.robs[:,idx])
+        ax.set_xlabel("Trials")
+        ax.set_ylabel("Spike Counts (norm)")
 
 class PETHRenderer:
     def __init__(
@@ -251,19 +451,23 @@ class PETHRenderer:
         ax.set_ylabel("Firing Rate (Hz)")
         ax.set_title(f"Unit {idx}")
 
-
 class FitRenderer:
-    def __init__(self, model=None, x=None, y=None, dfs=None, save_subdir="model_fits"):
+    def __init__(self, model=None, x=None, y=None, yhat=None, dfs=None, mode='lite', color=None, save_subdir="model_fits"):
         from scipy.stats import pearsonr as r
 
-        self.model = model
-        self.x = x
-        self.y = y
-        self.yhat = self.model(self.x).detach().numpy()
+        if mode=='liska':
+            self.model = model
+            self.x = x
+            self.y = y
+            self.yhat = self.model(self.x).detach().numpy()
 
+        elif mode=='lite':
+            self.y = y
+            self.yhat = yhat
+
+        self.color = "#5C2392" if color is None else color
         # dfs supports masking (mostly specific to stellina's lvm but could be adapted)
         self.dfs = np.ones(y.shape) if dfs is None else dfs
-
         self.rsquared = self.get_r2(self.y, self.yhat, self.dfs)
 
         self.save_subdir = save_subdir
@@ -287,13 +491,62 @@ class FitRenderer:
         ax.clear()
 
         ax.plot(self.y[:, idx], color="#666666", alpha=0.5, label="observed")
-        ax.plot(self.yhat[:, idx], color="#5C2392", alpha=0.5, label="predicted")
+        ax.plot(self.yhat[:, idx], color=self.color, alpha=0.5, label="predicted")
 
         # ax.legend()
         ax.set_xlabel("Trials")
         ax.set_ylabel("Spike Counts")
         ax.set_title(f"$r^2$={self.rsquared[idx]:.3f}")
 
+class FitRendererCompare:
+    def __init__(self, y, yhat1, yhat2, label1, label2, dfs1=None, dfs2=None, rsquared1=None, rsquared2=None, save_subdir="fit_comp"):
+        from scipy.stats import pearsonr as r
+
+        self.y = y
+        self.yhat1 = yhat1
+        self.yhat2 = yhat2
+
+        self.label1 = label1
+        self.label2 = label2
+
+        self.color1 = "#5C2392"
+        self.color2 = "#23926F"
+
+        # dfs supports masking (mostly specific to stellina's lvm but could be adapted)
+        self.dfs1 = np.ones(y.shape) if dfs1 is None else dfs1
+        self.dfs2 = np.ones(y.shape) if dfs2 is None else dfs2
+
+        self.rsquared1 = self.get_r2(self.y, self.yhat1, self.dfs1) if rsquared1 is None else rsquared1
+        self.rsquared2 = self.get_r2(self.y, self.yhat2, self.dfs2) if rsquared2 is None else rsquared2
+        
+        self.save_subdir = save_subdir
+
+    def get_r2(self, y, yhat, dfs, eps=1e-10):
+        ybar = (y * dfs).sum(axis=0) / dfs.sum(axis=0)  # the average y value
+        resids = y - yhat  # the difference between observed and predicted
+        residnull = y - ybar  # the difference between observed and observed avg
+        sstot = np.sum(residnull**2 * dfs, axis=0) + eps  # denom
+        ssres = np.sum(resids**2 * dfs, axis=0)  # num
+        r2 = 1 - ssres / sstot
+
+        return r2
+
+    def __call__(self, idx, fig, axes):
+        ax = (
+            axes[0][0]
+            if np.ndim(axes) > 1
+            else (axes[0] if np.ndim(axes) > 0 else axes)
+        )
+        ax.clear()
+
+        ax.plot(self.y[:, idx], color="#666666", alpha=0.5, label="observed")
+        ax.plot(self.yhat1[:, idx], color=self.color1, alpha=0.5, label=f"{self.label1}")
+        ax.plot(self.yhat2[:, idx], color=self.color2, alpha=0.5, label=f"{self.label2}")
+
+        ax.legend(loc="upper left")
+        ax.set_xlabel("Trials")
+        ax.set_ylabel("Spike Counts")
+        ax.set_title(f"$r^2_a$={self.rsquared1[idx]:.3f}, $r^2_b$={self.rsquared2[idx]:.3f}")
 
 class KernelRenderer:
     def __init__(self, model=None, dmat=None, bias=None, subdir="kernel"):

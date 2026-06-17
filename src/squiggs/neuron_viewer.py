@@ -110,7 +110,7 @@ class NeuronViewer:
             self.timer.start()
 
         elif event.key == "s":
-            self.save_fig(None)
+            self.save_fig(event)
 
     def on_key_release(self, event):
         if event.key in ["left", "right", "l", "h"]:

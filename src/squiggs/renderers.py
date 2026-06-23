@@ -149,11 +149,29 @@ class PETHWeightCompRenderer:
                 "#245AA0",
                 "#E67418",
             ],
+            same_ylim: bool = True,
             do_sem: bool = True,
             relim: bool = True,
             save_subdir="peth_weights_comp",
     ):
         self.peth_weight_renderers = []
+
+        # get ylims
+        if same_ylim:
+            all_means = {k_: {
+                k: ((1 / binwidth_s) * v).mean(axis=1) for k, v in peths[k_].items()
+            } for k_ in peths}
+            all_stds = {k_: {
+                k: sem((1 / binwidth_s) * v, axis=1)
+                if do_sem
+                else ((1 / binwidth_s) * v).std(axis=1)
+                for k, v in peths[k_].items()
+            } for k_ in peths}
+
+            ymax = np.max(np.concatenate([[np.max(all_means[strategy][k] + all_stds[strategy][k], axis=1) for k in peths[strategy].keys()] for strategy in ['mb', 'mf']]), axis=0)
+        else:
+            ymax=None
+
         for key in weights.keys():
             self.peth_weight_renderers.append(
                 PETHWeightRenderer(
@@ -172,6 +190,7 @@ class PETHWeightCompRenderer:
                     linewidths=linewidths,
                     colors=colors,
                     do_sem=do_sem,
+                    ymax=ymax,
                     relim=relim,
                     save_subdir=save_subdir
 
@@ -184,7 +203,7 @@ class PETHWeightCompRenderer:
         self.save_subdir = save_subdir
     def __call__(self, idx, fig, axes):
         for i, r in enumerate(self.peth_weight_renderers):
-            r(idx, fig, axes[i])
+            r(idx, fig, axes[i].reshape(1,-1))
         
 class PETHWeightRenderer:
     def __init__(
@@ -211,6 +230,7 @@ class PETHWeightRenderer:
             "#E67418",
         ],
         do_sem: bool = True,
+        ymax: list = None,
         relim: bool = True,
         save_subdir="peth_weights",
     ):
@@ -227,7 +247,7 @@ class PETHWeightRenderer:
         )
 
         self.peth_renderer = PETHRenderer(
-            peths, pres, posts, binwidth_s, colors, do_sem, relim, save_subdir
+            peths, pres, posts, binwidth_s, colors, do_sem=do_sem, ymax=ymax, relim=relim, save_subdir=save_subdir
         )
 
         self.raster_renderer = RasterRenderer(
@@ -240,18 +260,11 @@ class PETHWeightRenderer:
         self.save_subdir = save_subdir
 
     def __call__(self, idx, fig, axes):
-        self.weight_renderer(idx, fig, axes[0])
-        self.robs_renderer(idx, fig, axes[2])
-        self.sctavg_renderer(idx, fig, axes[1])
-        self.peth_renderer(idx, fig, axes[3])
-        self.raster_renderer(idx, fig, axes[-2:])
-        '''
-        self.weight_renderer(idx, fig, axes[:, 0])
-        self.robs_renderer(idx, fig, axes[:, 2])
-        self.sctavg_renderer(idx, fig, axes[:, 1])
-        self.peth_renderer(idx, fig, axes[:, 3])
-        self.raster_renderer(idx, fig, axes[:, -2:])
-        '''
+        self.weight_renderer(idx, fig, axes[:,0])
+        self.robs_renderer(idx, fig, axes[:,2])
+        self.sctavg_renderer(idx, fig, axes[:,1])
+        self.peth_renderer(idx, fig, axes[:,3])
+        self.raster_renderer(idx, fig, axes[:,-2:])
     
 class WeightRenderer:
     def __init__(
@@ -272,7 +285,7 @@ class WeightRenderer:
         )
         ax.clear()
 
-        im = ax.imshow(self.weights[idx].reshape(-1,1), vmin=-1.5, vmax=1.5, cmap='coolwarm')
+        im = ax.imshow(self.weights[idx].reshape(-1,1), vmin=-0.25, vmax=0.25, cmap='coolwarm', )
         ax.set_xticks([])
         ax.set_yticks(np.arange(self.weights.shape[1]), self.weight_names)
         # fig.colorbar(im, label=r'$\beta$ weight')
@@ -340,6 +353,7 @@ class PETHRenderer:
         ],
         do_sem: bool = True,
         relim: bool = True,
+        ymax: list = None,
         save_subdir="peth",
     ):
         """
@@ -397,13 +411,14 @@ class PETHRenderer:
             ],
             axis=0,
         )
+        
         self.ymax = np.max(
             [
                 np.max(self.all_means[k] + self.all_stds[k], axis=1)
                 for k in peths.keys()
             ],
             axis=0,
-        )
+        ) if ymax is None else ymax
 
         self.relim = relim
         if not self.relim:

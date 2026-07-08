@@ -48,13 +48,14 @@ class PETHRasterRenderer:
         ],
         do_sem: bool = True,
         relim: bool = True,
+        ymax=None,
         save_subdir="peth_raster",
     ):
         self.raster_renderer = RasterRenderer(
             event_times, spike_times, key, pres, posts, s, linewidths, save_subdir
         )
         self.peth_renderer = PETHRenderer(
-            peths, pres, posts, binwidth_s, colors, do_sem, relim, save_subdir
+            peths, pres, posts, binwidth_s, colors, do_sem, relim, ymax, save_subdir
         )
 
         self.ncols = self.raster_renderer.ncols + 1

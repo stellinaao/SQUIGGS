@@ -36,6 +36,7 @@ class PETHRasterRenderer:
         pres: float = 1,
         posts: float = 2,
         binwidth_s: float = 1,
+        tbin_edges: list=None,
         s: float = 1,
         linewidths: float = 0.5,
         colors: list = [
@@ -55,7 +56,7 @@ class PETHRasterRenderer:
             event_times, spike_times, key, pres, posts, s, linewidths, save_subdir
         )
         self.peth_renderer = PETHRenderer(
-            peths, pres, posts, binwidth_s, colors, do_sem, relim, ymax, save_subdir
+            peths, pres, posts, binwidth_s, tbin_edges, colors, do_sem, relim, ymax, save_subdir=save_subdir
         )
 
         self.ncols = self.raster_renderer.ncols + 1
@@ -220,6 +221,7 @@ class PETHWeightRenderer:
         pres: float = 1,
         posts: float = 2,
         binwidth_s: float = 1,
+        tbin_edges: list = None,
         s: float = 1,
         linewidths: float = 0.5,
         colors: list = [
@@ -248,7 +250,7 @@ class PETHWeightRenderer:
         )
 
         self.peth_renderer = PETHRenderer(
-            peths, pres, posts, binwidth_s, colors, do_sem=do_sem, ymax=ymax, relim=relim, save_subdir=save_subdir
+            peths, pres, posts, binwidth_s, tbin_edges, colors, do_sem=do_sem, ymax=ymax, relim=relim, save_subdir=save_subdir
         )
 
         self.raster_renderer = RasterRenderer(
@@ -286,7 +288,7 @@ class WeightRenderer:
         )
         ax.clear()
 
-        im = ax.imshow(self.weights[idx].reshape(-1,1), vmin=-0.25, vmax=0.25, cmap='coolwarm', )
+        im = ax.imshow(self.weights[idx].reshape(-1,1), vmin=-1, vmax=1, cmap='coolwarm', )
         ax.set_xticks([])
         ax.set_yticks(np.arange(self.weights.shape[1]), self.weight_names)
         # fig.colorbar(im, label=r'$\beta$ weight')
@@ -344,6 +346,7 @@ class PETHRenderer:
         pres: float = 1,
         posts: float = 2,
         binwidth_s: float = 0.1,
+        tbin_edges: list=None,
         colors: list = [
             "#29723E",
             "#9F5DBC",
@@ -430,7 +433,11 @@ class PETHRenderer:
             self.ymax_g += padding
 
         self.colors = colors
-        self.times, _, _ = construct_timebins(pres, posts, binwidth_s)
+
+        if tbin_edges is None:
+            self.times, _, _ = construct_timebins(pres, posts, binwidth_s)
+        else:
+            self.times = (tbin_edges + (binwidth_s/2))[:-1]
 
         self.save_subdir = save_subdir
 
@@ -468,7 +475,7 @@ class PETHRenderer:
         ax.set_title(f"Unit {idx}")
 
 class FitRenderer:
-    def __init__(self, model=None, x=None, y=None, yhat=None, dfs=None, mode='lite', color=None, save_subdir="model_fits"):
+    def __init__(self, model=None, x=None, y=None, yhat=None, rsquared=None, dfs=None, mode='lite', color=None, save_subdir="model_fits"):
         from scipy.stats import pearsonr as r
 
         if mode=='liska':
@@ -482,9 +489,10 @@ class FitRenderer:
             self.yhat = yhat
 
         self.color = "#5C2392" if color is None else color
+        
         # dfs supports masking (mostly specific to stellina's lvm but could be adapted)
         self.dfs = np.ones(y.shape) if dfs is None else dfs
-        self.rsquared = self.get_r2(self.y, self.yhat, self.dfs)
+        self.rsquared = self.get_r2(self.y, self.yhat, self.dfs) if rsquared is None else rsquared
 
         self.save_subdir = save_subdir
 

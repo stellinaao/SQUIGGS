@@ -1,3 +1,4 @@
+
 """
 renderers.py
 
@@ -7,7 +8,7 @@ with a NeuronViewer() object.
 
 Author: Stellina X. Ao
 Created: 2026-02-26
-Last Modified: 2026-03-19
+Last Modified: 2026-07-20
 Python Version: >= 3.10.4
 """
 

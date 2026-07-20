@@ -6,7 +6,7 @@ sliding plots across units.
 
 Author: Stellina X. Ao
 Created: 2026-02-26
-Last Modified: 2026-02-27
+Last Modified: 2026-07-20
 Python Version: >= 3.10.4
 """
 
@@ -33,6 +33,8 @@ class NeuronViewer:
         ymax=None,
         ncols=1,
         nrows=1,
+        fig_h=2.5,
+        fig_w=2.5,
         title="Neuron Viewer",
         fig_dir=FIGURES_DIR,
     ):
@@ -49,15 +51,23 @@ class NeuronViewer:
             ncols = self.render_func.ncols
         if hasattr(self.render_func, "nrows"):
             nrows = self.render_func.nrows
+        if hasattr(self.render_func, "fig_h"):
+            fig_h = self.render_func.fig_h
+        if hasattr(self.render_func, "fig_w"):
+            fig_w = self.render_func.fig_w
         sharey = (
             self.render_func.sharey if hasattr(self.render_func, "sharey") else False
+        )
+        sharex = (
+            self.render_func.sharex if hasattr(self.render_func, "sharex") else False
         )
 
         self.fig, self.axes = plt.subplots(
             ncols=ncols,
             nrows=nrows,
-            figsize=(2.5 * ncols, 2.5 * nrows),
+            figsize=(fig_w * ncols, fig_h * nrows),
             sharey=sharey,
+            sharex=sharex,
             squeeze=False,  # make logic same for 1 subfig too
         )
 

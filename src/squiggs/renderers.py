@@ -1,4 +1,3 @@
-
 """
 renderers.py
 
@@ -8,7 +7,7 @@ with a NeuronViewer() object.
 
 Author: Stellina X. Ao
 Created: 2026-02-26
-Last Modified: 2026-07-20
+Last Modified: 2026-03-19
 Python Version: >= 3.10.4
 """
 
@@ -36,8 +35,8 @@ class PETHRasterRenderer:
         key: str = None,
         pres: float = 1,
         posts: float = 2,
-        binwidth_s: float = 1,
-        tbin_edges: list=None,
+        binwidth_s: float = 0.1,
+        tbin_centers: list=None,
         s: float = 1,
         linewidths: float = 0.5,
         colors: list = [
@@ -57,7 +56,7 @@ class PETHRasterRenderer:
             event_times, spike_times, key, pres, posts, s, linewidths, save_subdir
         )
         self.peth_renderer = PETHRenderer(
-            peths, pres, posts, binwidth_s, tbin_edges, colors, do_sem, relim, ymax, save_subdir=save_subdir
+            peths, pres, posts, binwidth_s, tbin_centers, colors, do_sem, relim, ymax, save_subdir=save_subdir
         )
 
         self.ncols = self.raster_renderer.ncols + 1
@@ -134,6 +133,7 @@ class PETHWeightCompRenderer:
             weights: dict = None,
             weight_names: list = None,
             robs: dict = None,
+            robs_ylabel: str = "Spike Counts",
             sc_tavgs: dict = None,
             event_times: dict = None,
             spike_times: list = None,
@@ -181,6 +181,7 @@ class PETHWeightCompRenderer:
                     weights=weights[key],
                     weight_names=weight_names,
                     robs=robs[key],
+                    robs_ylabel=robs_ylabel,
                     sc_tavg=sc_tavgs[key],
                     event_times=event_times[key],
                     spike_times=spike_times, 
@@ -215,13 +216,14 @@ class PETHWeightRenderer:
         weight_names,
         robs,
         sc_tavg,
+        robs_ylabel=None,
         event_times: dict | list | pd.Series = None,
         spike_times: list = None,
         peths: dict = None,
         key: str = None,
         pres: float = 1,
         posts: float = 2,
-        binwidth_s: float = 1,
+        binwidth_s: float = 0.1,
         tbin_edges: list = None,
         s: float = 1,
         linewidths: float = 0.5,
@@ -243,7 +245,7 @@ class PETHWeightRenderer:
         )
 
         self.robs_renderer = ROBSRenderer(
-            robs, save_subdir
+            robs, ylabel=robs_ylabel, save_subdir=save_subdir
         )
 
         self.sctavg_renderer = SCTAVGRenderer(
@@ -270,15 +272,130 @@ class PETHWeightRenderer:
         self.peth_renderer(idx, fig, axes[:,3])
         self.raster_renderer(idx, fig, axes[:,-2:])
     
-class WeightRenderer:
+class PETHWeightRendererTime:
+    def __init__(
+        self,
+        weights,
+        weight_names=None,
+        weight_idxs=None,
+        tv=None,
+        tv_vals=None,
+        mode="trace",
+        peths: dict = None,
+        pres: float = 1,
+        posts: float = 2,
+        binwidth_s: float = 1,
+        tbin_centers: list = None,
+        colors: list = [
+            "#29723E",
+            "#9F5DBC",
+            "#A33434",
+            "#C49B2C",
+            "#245AA0",
+            "#E67418",
+        ],
+        do_sem: bool = True,
+        ymax: list = None,
+        relim: bool = True,
+        save_subdir="peth_weights",
+    ):
+        if mode=="matrix":
+            self.weight_renderer = WeightRenderer(
+                weights, weight_names, tbin_centers, save_subdir
+            )
+        elif mode=="trace":
+            self.weight_renderer = WeightRendererTime(
+                weights=weights, tv=tv, weight_idxs=weight_idxs, tv_vals=tv_vals, tbin_centers=tbin_centers, save_subdir=save_subdir
+            )
+        else:
+            raise ValueError("mode must be 'matrix' or 'trace'")
+
+        self.peth_renderer = PETHRenderer(
+            peths, pres, posts, binwidth_s, tbin_centers, colors, do_sem=do_sem, ymax=ymax, relim=relim, save_subdir=save_subdir
+        )
+
+        self.ncols = 2
+        self.nrows = 1
+        self.save_subdir = save_subdir
+
+    def __call__(self, idx, fig, axes):
+        self.weight_renderer(idx, fig, axes[:,0])
+        self.peth_renderer(idx, fig, axes[:,1])
+
+class WeightRendererTimeAll:  
     def __init__(
             self,
             weights,
-            weight_names,
-            save_subdir="weights",
+            tv_keys,
+            weight_idxs,
+            tv_vals,
+            tbin_centers,
+            colors: list = [
+                "#29723E",
+                "#9F5DBC",
+                "#A33434",
+                "#C49B2C",
+                "#245AA0",
+                "#E67418",
+            ],
+            save_subdir="weights_time",
+    ):
+        self.renderers = {}
+        for tv in tv_keys:
+            self.renderers[tv] = WeightRendererTime(
+                weights=weights,
+                tv=tv,
+                weight_idxs=weight_idxs,
+                tv_vals=tv_vals,
+                tbin_centers=tbin_centers,
+                colors=colors,
+                save_subdir=save_subdir,
+            )
+        self.nrows = len(tv_keys)
+        self.ncols = 1
+        
+        self.fig_h = 0.75
+        self.fig_w = 2.5 
+
+        self.sharex = True
+        self.save_subdir = save_subdir
+    
+    def __call__(self, idx, fig, axes):
+        for i, (r, ax) in enumerate(zip(self.renderers.values(), axes.flat)):
+            r(idx, fig, ax)
+
+            legend = ax.get_legend()
+            for text in legend.get_texts():
+                text.set_fontsize(3)
+            
+class WeightRendererTime:
+    def __init__(
+            self,
+            weights,
+            tv,
+            weight_idxs,
+            tv_vals,
+            tbin_centers,
+            colors: list = [
+                "#29723E",
+                "#9F5DBC",
+                "#A33434",
+                "#C49B2C",
+                "#245AA0",
+                "#E67418",
+            ],
+            save_subdir="weights_time",
     ):
         self.weights = weights
-        self.weight_names = weight_names
+        self.tv = tv
+        self.weight_idxs = weight_idxs
+        self.tv_vals = tv_vals
+
+        self.regressors = [f"{tv}_{val}" for val in tv_vals[tv]]
+        self.regr_idxs = [self.weight_idxs[regr] for regr in self.regressors]
+
+        self.tbin_centers = tbin_centers
+        self.colors = colors
         self.save_subdir = save_subdir
     
     def __call__(self, idx, fig, axes):
@@ -289,9 +406,51 @@ class WeightRenderer:
         )
         ax.clear()
 
-        im = ax.imshow(self.weights[idx].reshape(-1,1), vmin=-1, vmax=1, cmap='coolwarm', )
-        ax.set_xticks([])
-        ax.set_yticks(np.arange(self.weights.shape[1]), self.weight_names)
+        weights_ = self.weights[:,idx,self.regr_idxs].T
+
+        for i, regr in enumerate(self.regressors): 
+            ax.plot(weights_[i], color=self.colors[i], label=regr)
+    
+        ax.legend()
+
+class WeightRenderer:
+    def __init__(
+            self,
+            weights,
+            weight_names,
+            tbin_centers=None,
+            save_subdir="weights",
+    ):
+        self.weights = weights
+        self.weight_names = weight_names
+        self.save_subdir = save_subdir
+
+        self.tbin_centers=tbin_centers
+    
+    def __call__(self, idx, fig, axes):
+        ax = (
+            axes[0][0]
+            if np.ndim(axes) > 1
+            else (axes[0] if np.ndim(axes) > 0 else axes)
+        )
+        ax.clear()
+
+        if self.weights.ndim == 2:
+            weights_ = self.weights[idx].reshape(-1,1)
+        elif self.weights.ndim == 3:
+            weights_ = self.weights[:,idx,:].T
+
+        im = ax.imshow(weights_, vmin=-1, vmax=1, cmap='coolwarm', )
+        if self.weights.ndim==2:
+            ax.set_xticks([])
+            ax.set_yticks(np.arange(self.weights.shape[1]), self.weight_names)
+        elif self.weights.ndim==3:
+            # ax.set_xticks(range(self.weights.shape[0]), self.tbin_centers)
+            # print(ax.get_xticks())
+            # # ax.set_xticks(ax.get_xticks(), [f"{t:.2f}" for t in self.tbin_centers[ax.get_xticks()]])
+            ax.set_xticks([])
+            ax.set_xlabel("Trial Time")
+            ax.set_yticks(np.arange(self.weights.shape[2]), self.weight_names)
         # fig.colorbar(im, label=r'$\beta$ weight')
     
 class SCTAVGRenderer:
@@ -323,9 +482,11 @@ class ROBSRenderer:
     def __init__(
             self,
             robs,
+            ylabel="Firing Rate (Hz)",
             save_subdir="robs",
     ):
         self.robs = robs
+        self.ylabel = ylabel
         self.save_subdir=save_subdir
 
     def __call__(self, idx, fig, axes):
@@ -338,7 +499,7 @@ class ROBSRenderer:
 
         ax.plot(self.robs[:,idx])
         ax.set_xlabel("Trials")
-        ax.set_ylabel("Spike Counts (norm)")
+        ax.set_ylabel(self.ylabel)
 
 class PETHRenderer:
     def __init__(
@@ -347,7 +508,8 @@ class PETHRenderer:
         pres: float = 1,
         posts: float = 2,
         binwidth_s: float = 0.1,
-        tbin_edges: list=None,
+        tbin_centers: list=None,
+        ylabel = "Firing Rate (Hz)",
         colors: list = [
             "#29723E",
             "#9F5DBC",
@@ -399,6 +561,7 @@ class PETHRenderer:
         assert len(self.peths) <= len(colors), (
             "not enough colors to support number of conditions"
         )
+        print(binwidth_s)
         self.all_means = {
             k: ((1 / binwidth_s) * v).mean(axis=1) for k, v in peths.items()
         }
@@ -434,11 +597,11 @@ class PETHRenderer:
             self.ymax_g += padding
 
         self.colors = colors
-
-        if tbin_edges is None:
+        self.ylabel = ylabel
+        if tbin_centers is None:
             self.times, _, _ = construct_timebins(pres, posts, binwidth_s)
         else:
-            self.times = (tbin_edges + (binwidth_s/2))[:-1]
+            self.times = tbin_centers
 
         self.save_subdir = save_subdir
 
@@ -472,11 +635,11 @@ class PETHRenderer:
             ax.set_ylim(self.ymin_g, self.ymax_g)
 
         ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Firing Rate (Hz)")
+        ax.set_ylabel(self.ylabel)
         ax.set_title(f"Unit {idx}")
 
 class FitRenderer:
-    def __init__(self, model=None, x=None, y=None, yhat=None, rsquared=None, dfs=None, mode='lite', color=None, save_subdir="model_fits"):
+    def __init__(self, model=None, x=None, y=None, yhat=None, ylabel="Firing Rate (Hz)", rsquared=None, add_r2=True, dfs=None, mode='lite', color=None, save_subdir="model_fits"):
         from scipy.stats import pearsonr as r
 
         if mode=='liska':
@@ -490,10 +653,14 @@ class FitRenderer:
             self.yhat = yhat
 
         self.color = "#5C2392" if color is None else color
+        self.ylabel = ylabel
         
         # dfs supports masking (mostly specific to stellina's lvm but could be adapted)
         self.dfs = np.ones(y.shape) if dfs is None else dfs
-        self.rsquared = self.get_r2(self.y, self.yhat, self.dfs) if rsquared is None else rsquared
+        self.add_r2 = add_r2
+
+        if self.add_r2:
+            self.rsquared = self.get_r2(self.y, self.yhat, self.dfs) if rsquared is None else rsquared
 
         self.save_subdir = save_subdir
 
@@ -520,16 +687,63 @@ class FitRenderer:
 
         # ax.legend()
         ax.set_xlabel("Trials")
-        ax.set_ylabel("Spike Counts")
-        ax.set_title(f"$r^2$={self.rsquared[idx]:.3f}")
+        ax.set_ylabel(self.ylabel)
+        
+        if self.add_r2:
+            ax.set_title(f"$r^2$={self.rsquared[idx]:.3f}")
+
+class FitRendererTime:
+    def __init__(self, x=None, y=None, yhat=None, ylabel="Firing Rate (Hz)", rsquared=None, color=None, save_subdir="model_fits"):
+        from scipy.stats import pearsonr as r
+
+        self.x = x
+        self.y = y
+        self.yhat = yhat
+
+        self.color = "#5C2392" if color is None else color
+        self.ylabel = ylabel
+        
+        self.rsquared = rsquared
+
+        self.ncols = 6
+        self.nrows = 6
+
+        self.fig_h = 0.6
+        self.fig_w = 0.8
+
+        self.sharex = True
+        self.sharey = True
+
+        self.save_subdir = save_subdir
+
+    def __call__(self, idx, fig, axes):
+        idxs = np.sort(np.random.choice(self.y.shape[1], self.ncols*self.nrows))
+
+        for i, ax in enumerate(axes.flat):
+            ax.clear()
+            ax.plot(self.x, self.y[:,idxs[i],idx].T, alpha=0.5, linewidth=0.5, color="#666666", label="observed")
+            ax.plot(self.x, self.yhat[:,idxs[i],idx].T, alpha=0.5, linewidth=0.5, color="#8F64DB", label="predicted")
+
+            if i % self.ncols == 0:
+                ax.set_ylabel(self.ylabel, fontsize=3)
+            if i // self.nrows == self.nrows-1:
+                ax.set_xlabel("Trial Time (s)", fontsize=4)
+
+            # if i==0:
+            #     ax.legend(loc="upper left")
+            
+        fig.suptitle(fr"$r^2$={self.rsquared[idx]:.3f}")
+
 
 class FitRendererCompare:
-    def __init__(self, y, yhat1, yhat2, label1, label2, dfs1=None, dfs2=None, rsquared1=None, rsquared2=None, save_subdir="fit_comp"):
+    def __init__(self, y, yhat1, yhat2, label1, label2, ylabel="Firing Rate (Hz)", dfs1=None, dfs2=None, rsquared1=None, rsquared2=None, save_subdir="fit_comp"):
         from scipy.stats import pearsonr as r
 
         self.y = y
         self.yhat1 = yhat1
         self.yhat2 = yhat2
+
+        self.ylabel = ylabel
 
         self.label1 = label1
         self.label2 = label2
@@ -570,7 +784,7 @@ class FitRendererCompare:
 
         ax.legend(loc="upper left")
         ax.set_xlabel("Trials")
-        ax.set_ylabel("Spike Counts")
+        ax.set_ylabel(self.ylabel)
         ax.set_title(f"$r^2_a$={self.rsquared1[idx]:.3f}, $r^2_b$={self.rsquared2[idx]:.3f}")
 
 class KernelRenderer:
@@ -599,8 +813,7 @@ class KernelRenderer:
         """
         self.linkfunc = model.estimators_[0]._base_loss.link.inverse
 
-        # get the unique tags from dmat
-        self.all_tags = []
+
         for _, reg in dmat.regressors.items():
             self.all_tags.extend(reg.tags)
         self.all_tags = np.unique(self.all_tags)

@@ -14,6 +14,7 @@ Python Version: >= 3.10.4
 import numpy as np
 from damn.alignment import construct_timebins
 from spks.viz import plot_event_based_raster_fast
+from squiggs.viz import plot_trajectory
 from scipy.stats import sem
 import pandas as pd
 
@@ -24,7 +25,6 @@ __all__ = [
     "FitRenderer",
     "KernelRenderer",
 ]
-
 
 class PETHRasterRenderer:
     def __init__(
@@ -56,7 +56,7 @@ class PETHRasterRenderer:
             event_times, spike_times, key, pres, posts, s, linewidths, save_subdir
         )
         self.peth_renderer = PETHRenderer(
-            peths, pres, posts, binwidth_s, tbin_centers, colors, do_sem, relim, ymax, save_subdir=save_subdir
+            peths, pres, posts, binwidth_s, tbin_centers, colors=colors, do_sem=do_sem, relim=relim, ymax=ymax, save_subdir=save_subdir
         )
 
         self.ncols = self.raster_renderer.ncols + 1
@@ -67,7 +67,6 @@ class PETHRasterRenderer:
     def __call__(self, idx, fig, axes):
         self.raster_renderer(idx, fig, axes[:, :-1])
         self.peth_renderer(idx, fig, axes[:, -1])
-
 
 class RasterRenderer:
     def __init__(
@@ -445,14 +444,103 @@ class WeightRenderer:
             ax.set_xticks([])
             ax.set_yticks(np.arange(self.weights.shape[1]), self.weight_names)
         elif self.weights.ndim==3:
-            # ax.set_xticks(range(self.weights.shape[0]), self.tbin_centers)
-            # print(ax.get_xticks())
-            # # ax.set_xticks(ax.get_xticks(), [f"{t:.2f}" for t in self.tbin_centers[ax.get_xticks()]])
             ax.set_xticks([])
             ax.set_xlabel("Trial Time")
             ax.set_yticks(np.arange(self.weights.shape[2]), self.weight_names)
-        # fig.colorbar(im, label=r'$\beta$ weight')
     
+# strategy weight renderer
+class StrategyWeightRenderer:
+    def __init__(
+            self,
+            weights_mb,
+            weights_mf,
+            regressor,
+            dm_idxs,
+            save_subdir="strategy_weights",
+    ):
+        self.regressor = regressor
+        self.dm_idxs = dm_idxs
+
+        self.weights_mb = weights_mb[:,:,self.dm_idxs[regressor]]
+        self.weights_mf = weights_mf[:,:,self.dm_idxs[regressor]]
+
+        self.mn = min(np.min(self.weights_mb), np.min(self.weights_mf))
+        self.mx = max(np.max(self.weights_mb), np.max(self.weights_mf))
+
+        self.save_subdir = save_subdir
+    
+    def __call__(self, idx, fig, axes):
+        ax = (
+            axes[0][0]
+            if np.ndim(axes) > 1
+            else (axes[0] if np.ndim(axes) > 0 else axes)
+        )
+        ax.clear()
+
+        ax = plot_trajectory(
+            x=self.weights_mb[:,idx],
+            y=self.weights_mf[:,idx],
+            xlabel='mb',
+            ylabel='mf',
+            title=rf"$\beta$ {self.regressor}",
+            ax=ax,
+        )
+
+        ax.set_ylim([self.mn, self.mx])
+        ax.set_xlim([self.mn, self.mx])
+
+class StrategyWeightPETHRenderer:
+    def __init__(
+        self,
+        weights_mb,
+        weights_mf,
+        regressor,
+        dm_idxs,
+        peths_mb: dict = None,
+        peths_mf: dict = None,
+        pres: float = 1,
+        posts: float = 2,
+        binwidth_s: float = 0.1,
+        tbin_centers: list=None,
+        save_subdir="peth_raster",
+        **kwargs,
+    ):
+        self.peth_renderer_mb = PETHRenderer(
+            peths=peths_mb, 
+            pres=pres, 
+            posts=posts, 
+            binwidth_s=binwidth_s, 
+            tbin_centers=tbin_centers, 
+            save_subdir=save_subdir,
+            **kwargs
+        )
+
+        self.peth_renderer_mf = PETHRenderer(
+            peths=peths_mf, 
+            pres=pres, 
+            posts=posts, 
+            binwidth_s=binwidth_s, 
+            tbin_centers=tbin_centers, 
+            save_subdir=save_subdir,
+            **kwargs
+        )
+
+        self.sw_renderer = StrategyWeightRenderer(
+            weights_mb=weights_mb,
+            weights_mf=weights_mf,
+            regressor=regressor,
+            dm_idxs=dm_idxs,
+        )
+
+        self.ncols = 3
+        self.nrows = 1
+        self.save_subdir = save_subdir
+
+    def __call__(self, idx, fig, axes):
+        self.sw_renderer(idx, fig, axes[:, 0])
+        self.peth_renderer_mb(idx, fig, axes[:, 1])
+        self.peth_renderer_mf(idx, fig, axes[:, 2])
+
 class SCTAVGRenderer:
     def __init__(
             self,
@@ -561,7 +649,6 @@ class PETHRenderer:
         assert len(self.peths) <= len(colors), (
             "not enough colors to support number of conditions"
         )
-        print(binwidth_s)
         self.all_means = {
             k: ((1 / binwidth_s) * v).mean(axis=1) for k, v in peths.items()
         }

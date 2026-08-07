@@ -310,7 +310,7 @@ class PETHWeightRendererTime:
             raise ValueError("mode must be 'matrix' or 'trace'")
 
         self.peth_renderer = PETHRenderer(
-            peths, pres, posts, binwidth_s, tbin_centers, colors, do_sem=do_sem, ymax=ymax, relim=relim, save_subdir=save_subdir
+            peths=peths, pres=pres, posts=posts, binwidth_s=binwidth_s, tbin_centers=tbin_centers, colors=colors, do_sem=do_sem, ymax=ymax, relim=relim, save_subdir=save_subdir
         )
 
         self.ncols = 2
@@ -444,9 +444,13 @@ class WeightRenderer:
             ax.set_xticks([])
             ax.set_yticks(np.arange(self.weights.shape[1]), self.weight_names)
         elif self.weights.ndim==3:
+            # ax.set_xticks(range(self.weights.shape[0]), self.tbin_centers)
+            # print(ax.get_xticks())
+            # # ax.set_xticks(ax.get_xticks(), [f"{t:.2f}" for t in self.tbin_centers[ax.get_xticks()]])
             ax.set_xticks([])
             ax.set_xlabel("Trial Time")
             ax.set_yticks(np.arange(self.weights.shape[2]), self.weight_names)
+        # fig.colorbar(im, label=r'$\beta$ weight')
     
 # strategy weight renderer
 class StrategyWeightRenderer:
@@ -808,8 +812,8 @@ class FitRendererTime:
 
         for i, ax in enumerate(axes.flat):
             ax.clear()
-            ax.plot(self.x, self.y[:,idxs[i],idx].T, alpha=0.5, linewidth=0.5, color="#666666", label="observed")
-            ax.plot(self.x, self.yhat[:,idxs[i],idx].T, alpha=0.5, linewidth=0.5, color="#8F64DB", label="predicted")
+            ax.plot(self.x, self.y[:,idxs[i],idx].T, alpha=0.75, linewidth=0.75, color="#666666", label="observed")
+            ax.plot(self.x, self.yhat[:,idxs[i],idx].T, alpha=0.75, linewidth=0.75, color="#8F64DB", label="predicted")
 
             if i % self.ncols == 0:
                 ax.set_ylabel(self.ylabel, fontsize=3)

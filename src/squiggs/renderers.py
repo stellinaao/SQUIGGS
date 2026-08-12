@@ -223,7 +223,7 @@ class PETHWeightRenderer:
         pres: float = 1,
         posts: float = 2,
         binwidth_s: float = 0.1,
-        tbin_edges: list = None,
+        tbin_centers: list = None,
         s: float = 1,
         linewidths: float = 0.5,
         colors: list = [
@@ -252,7 +252,7 @@ class PETHWeightRenderer:
         )
 
         self.peth_renderer = PETHRenderer(
-            peths, pres, posts, binwidth_s, tbin_edges, colors, do_sem=do_sem, ymax=ymax, relim=relim, save_subdir=save_subdir
+            peths=peths, pres=pres, posts=posts, binwidth_s=binwidth_s, tbin_centers=tbin_centers, colors=colors, do_sem=do_sem, ymax=ymax, relim=relim, save_subdir=save_subdir
         )
 
         self.raster_renderer = RasterRenderer(
@@ -460,6 +460,7 @@ class StrategyWeightRenderer:
             weights_mf,
             regressor,
             dm_idxs,
+            relim=False,
             save_subdir="strategy_weights",
     ):
         self.regressor = regressor
@@ -470,6 +471,8 @@ class StrategyWeightRenderer:
 
         self.mn = min(np.min(self.weights_mb), np.min(self.weights_mf))
         self.mx = max(np.max(self.weights_mb), np.max(self.weights_mf))
+
+        self.relim=relim
 
         self.save_subdir = save_subdir
     
@@ -490,8 +493,9 @@ class StrategyWeightRenderer:
             ax=ax,
         )
 
-        ax.set_ylim([self.mn, self.mx])
-        ax.set_xlim([self.mn, self.mx])
+        if not self.relim:
+            ax.set_ylim([self.mn, self.mx])
+            ax.set_xlim([self.mn, self.mx])
 
 class StrategyWeightPETHRenderer:
     def __init__(
@@ -500,6 +504,7 @@ class StrategyWeightPETHRenderer:
         weights_mf,
         regressor,
         dm_idxs,
+        relim=False,
         peths_mb: dict = None,
         peths_mf: dict = None,
         pres: float = 1,
@@ -534,6 +539,7 @@ class StrategyWeightPETHRenderer:
             weights_mf=weights_mf,
             regressor=regressor,
             dm_idxs=dm_idxs,
+            relim=relim,
         )
 
         self.ncols = 3
@@ -643,7 +649,6 @@ class PETHRenderer:
         """
 
         self.peths = peths
-
         # ensure that the same number of cells are present for each condition
         assert len(np.unique([v.shape[0] for v in self.peths.values()])) == 1, (
             "number of cells in each condition should be the same, but are not"

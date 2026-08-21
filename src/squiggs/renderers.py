@@ -279,7 +279,9 @@ class PETHWeightRendererTime:
         weight_idxs=None,
         tv=None,
         tv_vals=None,
+        num_bins=None,
         mode="trace",
+        tre_mode="dme",
         peths: dict = None,
         pres: float = 1,
         posts: float = 2,
@@ -304,7 +306,7 @@ class PETHWeightRendererTime:
             )
         elif mode=="trace":
             self.weight_renderer = WeightRendererTime(
-                weights=weights, tv=tv, weight_idxs=weight_idxs, tv_vals=tv_vals, tbin_centers=tbin_centers, save_subdir=save_subdir
+                weights=weights, tv=tv, weight_idxs=weight_idxs, tv_vals=tv_vals, num_bins=num_bins, mode=tre_mode, tbin_centers=tbin_centers, save_subdir=save_subdir
             )
         else:
             raise ValueError("mode must be 'matrix' or 'trace'")
@@ -373,8 +375,10 @@ class WeightRendererTime:
             weights,
             tv,
             weight_idxs,
-            tv_vals,
             tbin_centers,
+            tv_vals=None,
+            num_bins=None,
+            mode="dme",
             colors: list = [
                 "#29723E",
                 "#9F5DBC",
@@ -390,9 +394,21 @@ class WeightRendererTime:
         self.weight_idxs = weight_idxs
         self.tv_vals = tv_vals
 
-        self.regressors = [f"{tv}_{val}" for val in tv_vals[tv]]
-        self.regr_idxs = [self.weight_idxs[regr] for regr in self.regressors]
+        if mode=="loe":
+            self.regressors = [f"{tv}_{val}" for val in tv_vals[tv]]
+            self.regr_idxs = [self.weight_idxs[regr] for regr in self.regressors]
+        elif mode=="dme":
+            self.regr_idxs = [self.weight_idxs[f"{tv}_{i}"] for i in range(num_bins)]
 
+            if self.tv == "response":
+                self.tv_pos = "left"
+                self.tv_neg = "right"
+
+            elif self.tv == "rewarded":
+                self.tv_pos = "corr"
+                self.tv_neg = "incorr"
+
+        self.mode = mode
         self.tbin_centers = tbin_centers
         self.colors = colors
         self.save_subdir = save_subdir
@@ -405,10 +421,15 @@ class WeightRendererTime:
         )
         ax.clear()
 
-        weights_ = self.weights[:,idx,self.regr_idxs].T
+        weights_ = self.weights[idx,self.regr_idxs]
 
-        for i, regr in enumerate(self.regressors): 
-            ax.plot(weights_[i], color=self.colors[i], label=regr)
+        if self.mode=="loe":
+            for i, regr in enumerate(self.regressors): 
+                ax.plot(weights_[i], color=self.colors[i], label=self.tv)
+        elif self.mode=="dme":
+            ax.plot(weights_, color=self.colors[-1], label=self.tv)
+            ax.axhline(y=0, color="k", linewidth=0.5)
+            ax.set_ylabel(fr"$\beta$ {self.tv} (- {self.tv_neg}, + {self.tv_pos})")
     
         ax.legend()
 
@@ -456,18 +477,43 @@ class WeightRenderer:
 class StrategyWeightRenderer:
     def __init__(
             self,
-            weights_mb,
-            weights_mf,
-            regressor,
-            dm_idxs,
+            bootstrapper_mb=None,
+            bootstrapper_mf=None,
+            encoder_mb=None,
+            encoder_mf=None,
+            reg=None,
+            regressor=None,
+            values=None,
+            mode="dme",
             relim=False,
             save_subdir="strategy_weights",
     ):
         self.regressor = regressor
-        self.dm_idxs = dm_idxs
+        self.dm_idxs = encoder_mb.dm_idxs
+        self.mode = mode
+        self.pos, self.neg = values
 
-        self.weights_mb = weights_mb[:,:,self.dm_idxs[regressor]]
-        self.weights_mf = weights_mf[:,:,self.dm_idxs[regressor]]
+        if self.mode == "dme":
+            idx_bounds = (self.dm_idxs[f"{regressor}_0"], self.dm_idxs[f"{regressor}_{encoder_mb.num_bins-1}"]+1)
+            if bootstrapper_mb is None:
+                self.weights_mb = encoder_mb.encoder_weights[encoder_mb.reg_idxs[reg],idx_bounds[0]:idx_bounds[1]].T
+                self.weights_mf = encoder_mf.encoder_weights[encoder_mf.reg_idxs[reg],idx_bounds[0]:idx_bounds[1]].T
+
+                self.ci_mb = None
+                self.ci_mf = None
+            else:
+                self.weights_mb = bootstrapper_mb.bweight_stats['mu'][encoder_mb.reg_idxs[reg], idx_bounds[0]:idx_bounds[1]].T
+                self.weights_mf = bootstrapper_mf.bweight_stats['mu'][encoder_mf.reg_idxs[reg], idx_bounds[0]:idx_bounds[1]].T
+
+                self.ci_mb = bootstrapper_mb.bweight_stats['ci_h'][encoder_mb.reg_idxs[reg], idx_bounds[0]:idx_bounds[1]].T
+                self.ci_mf = bootstrapper_mf.bweight_stats['ci_h'][encoder_mf.reg_idxs[reg], idx_bounds[0]:idx_bounds[1]].T
+
+        elif self.mode == "loe":
+            self.weights_mb = encoder_mb.encoder_weights[:,encoder_mb.reg_idxs[reg],self.dm_idxs[regressor]]
+            self.weights_mf = encoder_mf.encoder_weights[:,encoder_mf.reg_idxs[reg],self.dm_idxs[regressor]]
+
+            self.ci_mb = None
+            self.ci_mf = None
 
         self.mn = min(np.min(self.weights_mb), np.min(self.weights_mf))
         self.mx = max(np.max(self.weights_mb), np.max(self.weights_mf))
@@ -487,8 +533,10 @@ class StrategyWeightRenderer:
         ax = plot_trajectory(
             x=self.weights_mb[:,idx],
             y=self.weights_mf[:,idx],
-            xlabel='mb',
-            ylabel='mf',
+            x_ci=self.ci_mb[:,idx] if self.ci_mb is not None else None,
+            y_ci=self.ci_mf[:,idx] if self.ci_mb is not None else None,
+            xlabel=f'mb (- {self.neg}, + {self.pos})',
+            ylabel=f'mf (- {self.neg}, + {self.pos})',
             title=rf"$\beta$ {self.regressor}",
             ax=ax,
         )
@@ -500,10 +548,14 @@ class StrategyWeightRenderer:
 class StrategyWeightPETHRenderer:
     def __init__(
         self,
-        weights_mb,
-        weights_mf,
-        regressor,
-        dm_idxs,
+        bootstrapper_mb=None,
+        bootstrapper_mf=None,
+        encoder_mb=None,
+        encoder_mf=None,
+        reg=None,
+        regressor=None,
+        values=None,
+        mode="dme",
         relim=False,
         peths_mb: dict = None,
         peths_mf: dict = None,
@@ -514,12 +566,67 @@ class StrategyWeightPETHRenderer:
         save_subdir="peth_raster",
         **kwargs,
     ):
+
+        all_means_mb = {
+            k: ((1 / binwidth_s) * v).mean(axis=1) for k, v in peths_mb.items()
+        }
+        all_stds_mb = {
+            k: sem((1 / binwidth_s) * v, axis=1)
+            for k, v in peths_mb.items()
+        }
+
+        all_means_mf = {
+            k: ((1 / binwidth_s) * v).mean(axis=1) for k, v in peths_mf.items()
+        }
+        all_stds_mf = {
+            k: sem((1 / binwidth_s) * v, axis=1)
+            for k, v in peths_mf.items()
+        }
+
+        ymin_mb = np.min(
+            [
+                np.min(all_means_mb[k] - all_stds_mb[k], axis=1)
+                for k in peths_mb.keys()
+            ],
+            axis=0,
+        )
+
+        ymax_mb = np.max(
+            [
+                np.max(all_means_mb[k] + all_stds_mb[k], axis=1)
+                for k in peths_mb.keys()
+            ],
+            axis=0,
+        )
+
+        ymin_mf = np.min(
+            [
+                np.min(all_means_mf[k] - all_stds_mf[k], axis=1)
+                for k in peths_mf.keys()
+            ],
+            axis=0,
+        )
+
+        ymax_mf = np.max(
+            [
+                np.max(all_means_mf[k] + all_stds_mf[k], axis=1)
+                for k in peths_mf.keys()
+            ],
+            axis=0,
+        )
+
+        ymin = np.min((ymin_mb, ymin_mf), axis=0)
+        ymax = np.max((ymax_mb, ymax_mf), axis=0)
+
         self.peth_renderer_mb = PETHRenderer(
             peths=peths_mb, 
             pres=pres, 
             posts=posts, 
+            title="mb",
             binwidth_s=binwidth_s, 
             tbin_centers=tbin_centers, 
+            ymin=ymin,
+            ymax=ymax,
             save_subdir=save_subdir,
             **kwargs
         )
@@ -528,17 +635,24 @@ class StrategyWeightPETHRenderer:
             peths=peths_mf, 
             pres=pres, 
             posts=posts, 
+            title="mf",
             binwidth_s=binwidth_s, 
             tbin_centers=tbin_centers, 
+            ymin=ymin,
+            ymax=ymax,
             save_subdir=save_subdir,
             **kwargs
         )
 
         self.sw_renderer = StrategyWeightRenderer(
-            weights_mb=weights_mb,
-            weights_mf=weights_mf,
+            bootstrapper_mb=bootstrapper_mb,
+            bootstrapper_mf=bootstrapper_mf,
+            encoder_mb=encoder_mb,
+            encoder_mf=encoder_mf, 
+            reg=reg, 
             regressor=regressor,
-            dm_idxs=dm_idxs,
+            values=values,
+            mode=mode,
             relim=relim,
         )
 
@@ -580,7 +694,7 @@ class ROBSRenderer:
     def __init__(
             self,
             robs,
-            ylabel="Firing Rate (Hz)",
+            ylabel="Firing Rate (sp/s)",
             save_subdir="robs",
     ):
         self.robs = robs
@@ -599,6 +713,21 @@ class ROBSRenderer:
         ax.set_xlabel("Trials")
         ax.set_ylabel(self.ylabel)
 
+# class PairedPETHRenderer:
+#     def __init__(
+#             self,
+#             peths_a,
+#             peths_b,
+#             pres,
+#             posts,
+#             binwdith_s,
+#             tbin_centers,
+#             ylabel="Firing Rate (sp/s)",
+#             save_subdir="paired_peth",
+#             **kwargs
+#     ):
+
+
 class PETHRenderer:
     def __init__(
         self,
@@ -607,7 +736,8 @@ class PETHRenderer:
         posts: float = 2,
         binwidth_s: float = 0.1,
         tbin_centers: list=None,
-        ylabel = "Firing Rate (Hz)",
+        ylabel = "Firing Rate (sp/s)",
+        title=None,
         colors: list = [
             "#29723E",
             "#9F5DBC",
@@ -618,6 +748,7 @@ class PETHRenderer:
         ],
         do_sem: bool = True,
         relim: bool = True,
+        ymin: list = None,
         ymax: list = None,
         save_subdir="peth",
     ):
@@ -674,7 +805,7 @@ class PETHRenderer:
                 for k in peths.keys()
             ],
             axis=0,
-        )
+        ) if ymin is None else ymin
         
         self.ymax = np.max(
             [
@@ -694,6 +825,7 @@ class PETHRenderer:
 
         self.colors = colors
         self.ylabel = ylabel
+        self.title = title
         if tbin_centers is None:
             self.times, _, _ = construct_timebins(pres, posts, binwidth_s)
         else:
@@ -732,10 +864,13 @@ class PETHRenderer:
 
         ax.set_xlabel("Time (s)")
         ax.set_ylabel(self.ylabel)
-        ax.set_title(f"Unit {idx}")
+        if self.title is None:
+            ax.set_title(f"Unit {idx}")
+        else:
+            ax.set_title(f"Unit {idx}, {self.title}")
 
 class FitRenderer:
-    def __init__(self, model=None, x=None, y=None, yhat=None, ylabel="Firing Rate (Hz)", rsquared=None, add_r2=True, dfs=None, mode='lite', color=None, save_subdir="model_fits"):
+    def __init__(self, model=None, x=None, y=None, yhat=None, ylabel="Firing Rate (sp/s)", rsquared=None, add_r2=True, dfs=None, mode='lite', color=None, save_subdir="model_fits"):
         from scipy.stats import pearsonr as r
 
         if mode=='liska':
@@ -789,7 +924,7 @@ class FitRenderer:
             ax.set_title(f"$r^2$={self.rsquared[idx]:.3f}")
 
 class FitRendererTime:
-    def __init__(self, x=None, y=None, yhat=None, ylabel="Firing Rate (Hz)", rsquared=None, color=None, save_subdir="model_fits"):
+    def __init__(self, x=None, y=None, yhat=None, ylabel="Firing Rate (sp/s)", rsquared=None, color=None, save_subdir="model_fits"):
         from scipy.stats import pearsonr as r
 
         self.x = x
@@ -817,6 +952,7 @@ class FitRendererTime:
 
         for i, ax in enumerate(axes.flat):
             ax.clear()
+
             ax.plot(self.x, self.y[:,idxs[i],idx].T, alpha=0.75, linewidth=0.75, color="#666666", label="observed")
             ax.plot(self.x, self.yhat[:,idxs[i],idx].T, alpha=0.75, linewidth=0.75, color="#8F64DB", label="predicted")
 
@@ -830,9 +966,8 @@ class FitRendererTime:
             
         fig.suptitle(fr"$r^2$={self.rsquared[idx]:.3f}")
 
-
 class FitRendererCompare:
-    def __init__(self, y, yhat1, yhat2, label1, label2, ylabel="Firing Rate (Hz)", dfs1=None, dfs2=None, rsquared1=None, rsquared2=None, save_subdir="fit_comp"):
+    def __init__(self, y, yhat1, yhat2, label1, label2, ylabel="Firing Rate (sp/s)", dfs1=None, dfs2=None, rsquared1=None, rsquared2=None, save_subdir="fit_comp"):
         from scipy.stats import pearsonr as r
 
         self.y = y

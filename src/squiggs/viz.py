@@ -5,9 +5,14 @@ from matplotlib.collections import LineCollection
 
 """ TRAJECTORIES """
 # plot a 2d trajectory with line color encoding time (LineCollection)
+
 def plot_trajectory(
     x,
     y,
+    x_ci=None,
+    y_ci=None,
+    mn=None,
+    mx=None,
     xlabel="",
     ylabel="",
     title="",
@@ -18,6 +23,9 @@ def plot_trajectory(
     mid_marker=".",
     start_size_mult=10,
     end_size_mult=2,
+    ci_color="#333333",
+    ci_alpha=0.5,
+    ci_linewidth=0.5,
     ax=None,
 ):
     if ax is None:
@@ -26,35 +34,72 @@ def plot_trajectory(
     t = np.arange(len(x))
     vmin, vmax = t.min(), t.max()
 
+    # error bars first, so everything else draws on top
+    if (x_ci is not None) or (y_ci is not None):
+        ax.errorbar(
+            x,
+            y,
+            xerr=x_ci,
+            yerr=y_ci,
+            fmt="none",
+            ecolor=ci_color,
+            alpha=ci_alpha,
+            elinewidth=ci_linewidth,
+            capsize=0,
+            zorder=1,
+        )
+
     points = np.array([x, y]).T.reshape(-1, 1, 2)
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
 
-    lc = LineCollection(segments, cmap=cmap, array=t[:-1], linewidth=1)
+    lc = LineCollection(segments, cmap=cmap, array=t[:-1], linewidth=1, zorder=2)
     lc.set_clim(vmin, vmax)
     ax.add_collection(lc)
 
     # middle points
     if len(x) > 2:
         ax.scatter(
-            x[1:-1], y[1:-1], c=t[1:-1], cmap=cmap, vmin=vmin, vmax=vmax,
-            s=s, marker=mid_marker, zorder=3,
+            x[1:-1],
+            y[1:-1],
+            c=t[1:-1],
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            s=s,
+            marker=mid_marker,
+            zorder=3,
         )
 
     # start and end, drawn on top with distinct markers
     ax.scatter(
-        x[0], y[0], c="#ffffff", 
-        s=s * start_size_mult, marker=start_marker, zorder=4,
-        edgecolors="k", linewidths=0.5,
+        x[0],
+        y[0],
+        c="#ffffff",
+        s=s * start_size_mult,
+        marker=start_marker,
+        zorder=4,
+        edgecolors="k",
+        linewidths=0.5,
     )
     ax.scatter(
-        x[-1], y[-1], c="#ffffff", 
-        s=s * end_size_mult, marker=end_marker, zorder=4,
-        edgecolors="k", linewidths=0.5,
+        x[-1],
+        y[-1],
+        c="#ffffff",
+        s=s * end_size_mult,
+        marker=end_marker,
+        zorder=4,
+        edgecolors="k",
+        linewidths=0.5,
     )
 
     # axes
     ax.axvline(x=0, color="k", linewidth=0.5, zorder=-2)
     ax.axhline(y=0, color="k", linewidth=0.5, zorder=-2)
+
+    # lim
+    if (mn is not None) and (mx is not None):
+        ax.set_xlim([mn, mx])
+        ax.set_ylim([mn, mx])
 
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)

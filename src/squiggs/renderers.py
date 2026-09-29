@@ -126,6 +126,225 @@ class RasterRenderer:
             else:
                 ax.set_title(f"{key}, Unit {idx}")
 
+class PETHStrategyCompRenderer:
+    def __init__(self, encoder_mb, encoder_mf, reg="DLS", mode="response", same_ylim=True, do_sem=True, save_subdir="peth_strategy_comp"):
+        def get_psths_cond(psths, trial_data, mode="both"):
+            if mode == "both":
+                psths_cond = {
+                    "left_corr": psths[
+                        :,
+                        (trial_data["response"] == 1) & (trial_data["rewarded"] == 1),
+                    ],
+                    "right_corr": psths[
+                        :,
+                        (trial_data["response"] == -1) & (trial_data["rewarded"] == 1),
+                    ],
+                    "left_incorr": psths[
+                        :,
+                        (trial_data["response"] == 1) & (trial_data["rewarded"] == 0),
+                    ],
+                    "right_incorr": psths[
+                        :,
+                        (trial_data["response"] == -1) & (trial_data["rewarded"] == 0),
+                    ],
+                }
+            elif mode == "response":
+                psths_cond = {
+                    "left": psths[:, (trial_data["response"] == 1)],
+                    "right": psths[:, (trial_data["response"] == -1)],
+                }
+            elif mode == "rewarded":
+                psths_cond = {
+                    "corr": psths[:, (trial_data["rewarded"] == 1)],
+                    "incorr": psths[:, (trial_data["rewarded"] == 0)],
+                }
+            elif mode == "strategy":
+                psths_cond = {
+                    "mb": psths[:, (trial_data["strategy"] == 1)],
+                    "mf": psths[:, (trial_data["strategy"] == -1)],
+                }
+            else:
+                raise NotImplementedError(
+                    "valid arguments for mode are 'response,' 'rewarded,' 'both,' and 'strategy.'"
+                )
+            return psths_cond
+
+        self.encoder_mb = encoder_mb
+        self.encoder_mf = encoder_mf
+
+        self.rs = []
+        peths = {k: get_psths_cond(e.psths[reg], e.trial_data, mode=mode) for (k, e) in zip(['mb', 'mf'], [encoder_mb, encoder_mf])}
+
+        if same_ylim:
+            binwidth_s = encoder_mb.binwidth_ms / 1000
+
+            all_means = {k_: {
+                k: ((1 / binwidth_s) * v).mean(axis=1) for k, v in peths[k_].items()
+            } for k_ in peths}
+            all_stds = {k_: {
+                k: sem((1 / binwidth_s) * v, axis=1)
+                if do_sem
+                else ((1 / binwidth_s) * v).std(axis=1)
+                for k, v in peths[k_].items()
+            } for k_ in peths}
+
+            ymax = np.max(np.concatenate([[np.max(all_means[strategy][k] + all_stds[strategy][k], axis=1) for k in peths[strategy].keys()] for strategy in ['mb', 'mf']]), axis=0)
+        else:
+            ymax=None
+
+        for e in [encoder_mb, encoder_mf]:
+            self.rs.append(PETHRenderer(
+                peths=get_psths_cond(e.psths[reg], e.trial_data, mode=mode),
+                pres=e.tpre,
+                posts=e.tpost,
+                binwidth_s=e.binwidth_ms / 1000,
+                tbin_centers=e.tbin_centers,
+                ymax=ymax,
+            ))
+
+        self.ncols=2
+        self.sharey=True
+        self.save_subdir = save_subdir 
+
+    def __call__(self, idx, fig, axes):
+        for i, r in enumerate(self.rs):
+            r(idx, fig, axes[:,i].reshape(1,-1))
+
+class PETHRasterStrategyCompRenderer:
+    def __init__(self, encoder_mb, encoder_mf, reg="DLS", mode="response", same_ylim=True, do_sem=True, save_subdir="peth_raster_strategy_comp"):
+        def get_choice_ts(trial_data, mode="both"):
+            lc_mask = (trial_data.response == 1) & (trial_data.rewarded)
+            rc_mask = (trial_data.response == -1) & (trial_data.rewarded)
+            li_mask = (trial_data.response == 1) & (~trial_data.rewarded)
+            ri_mask = (trial_data.response == -1) & (~trial_data.rewarded)
+
+            if mode == "both":
+                choice_ts = {
+                    "left_corr": trial_data[lc_mask]["trial_start_time"]
+                    + trial_data[lc_mask]["response_time"],
+                    "right_corr": trial_data[rc_mask]["trial_start_time"]
+                    + trial_data[rc_mask]["response_time"],
+                    "left_incorr": trial_data[li_mask]["trial_start_time"]
+                    + trial_data[li_mask]["response_time"],
+                    "right_incorr": trial_data[ri_mask]["trial_start_time"]
+                    + trial_data[ri_mask]["response_time"],
+                }
+            elif mode == "response":
+                choice_ts = {
+                    "left": trial_data[(trial_data.response == 1)]["trial_start_time"]
+                    + trial_data[trial_data.response == 1]["response_time"],
+                    "right": trial_data[trial_data.response == -1]["trial_start_time"]
+                    + trial_data[trial_data.response == -1]["response_time"],
+                }
+            elif mode == "rewarded":
+                choice_ts = {
+                    "corr": trial_data[(lc_mask) | (rc_mask)]["trial_start_time"]
+                    + trial_data[(lc_mask) | (rc_mask)]["response_time"],
+                    # + 0.5,
+                    "incorr": trial_data[(li_mask) | (ri_mask)]["trial_start_time"]
+                    + trial_data[(li_mask) | (ri_mask)]["response_time"],
+                    # + 0.5,
+                }
+            elif mode == "strategy":
+                choice_ts = {
+                    "mb": trial_data[(trial_data.strategy == 1)]["trial_start_time"]
+                    + trial_data[(trial_data.strategy == 1)]["response_time"],
+                    "mf": trial_data[(trial_data.strategy == -1)]["trial_start_time"]
+                    + trial_data[(trial_data.strategy == -1)]["response_time"],
+                }
+            else:
+                raise NotImplementedError(
+                    "valid arguments for mode are 'response,' 'rewarded,' 'both,' and 'strategy.'"
+                )
+            return choice_ts
+
+        def get_psths_cond(psths, trial_data, mode="both"):
+            if mode == "both":
+                psths_cond = {
+                    "left_corr": psths[
+                        :,
+                        (trial_data["response"] == 1) & (trial_data["rewarded"] == 1),
+                    ],
+                    "right_corr": psths[
+                        :,
+                        (trial_data["response"] == -1) & (trial_data["rewarded"] == 1),
+                    ],
+                    "left_incorr": psths[
+                        :,
+                        (trial_data["response"] == 1) & (trial_data["rewarded"] == 0),
+                    ],
+                    "right_incorr": psths[
+                        :,
+                        (trial_data["response"] == -1) & (trial_data["rewarded"] == 0),
+                    ],
+                }
+            elif mode == "response":
+                psths_cond = {
+                    "left": psths[:, (trial_data["response"] == 1)],
+                    "right": psths[:, (trial_data["response"] == -1)],
+                }
+            elif mode == "rewarded":
+                psths_cond = {
+                    "corr": psths[:, (trial_data["rewarded"] == 1)],
+                    "incorr": psths[:, (trial_data["rewarded"] == 0)],
+                }
+            elif mode == "strategy":
+                psths_cond = {
+                    "mb": psths[:, (trial_data["strategy"] == 1)],
+                    "mf": psths[:, (trial_data["strategy"] == -1)],
+                }
+            else:
+                raise NotImplementedError(
+                    "valid arguments for mode are 'response,' 'rewarded,' 'both,' and 'strategy.'"
+                )
+            return psths_cond
+
+        self.encoder_mb = encoder_mb
+        self.encoder_mf = encoder_mf
+
+        self.rs = []
+        peths = {k: get_psths_cond(e.psths[reg], e.trial_data, mode=mode) for (k, e) in zip(['mb', 'mf'], [encoder_mb, encoder_mf])}
+
+        if same_ylim:
+            binwidth_s = encoder_mb.binwidth_ms / 1000
+
+            all_means = {k_: {
+                k: ((1 / binwidth_s) * v).mean(axis=1) for k, v in peths[k_].items()
+            } for k_ in peths}
+            all_stds = {k_: {
+                k: sem((1 / binwidth_s) * v, axis=1)
+                if do_sem
+                else ((1 / binwidth_s) * v).std(axis=1)
+                for k, v in peths[k_].items()
+            } for k_ in peths}
+
+            ymax = np.max(np.concatenate([[np.max(all_means[strategy][k] + all_stds[strategy][k], axis=1) for k in peths[strategy].keys()] for strategy in ['mb', 'mf']]), axis=0)
+        else:
+            ymax=None
+
+        for e in [encoder_mb, encoder_mf]:
+            self.rs.append(PETHRasterRenderer(
+                event_times=get_choice_ts(e.trial_data, mode=mode),
+                spike_times=e.spike_times[reg],
+                peths=get_psths_cond(e.psths[reg], e.trial_data, mode=mode),
+                pres=e.tpre,
+                posts=e.tpost,
+                binwidth_s=e.binwidth_ms / 1000,
+                tbin_centers=e.tbin_centers,
+                ymax=ymax,
+                s=0.5,
+                linewidths=0.5,
+            ))
+
+        self.ncols=3
+        self.nrows=2
+        self.sharex=True
+        self.save_subdir = save_subdir
+
+    def __call__(self, idx, fig, axes):
+        for i, r in enumerate(self.rs):
+            r(idx, fig, axes[i].reshape(1,-1))
+
 class PETHWeightCompRenderer:
     def __init__(
             self,
@@ -400,7 +619,7 @@ class WeightRendererTime:
         elif mode=="dme":
             self.regr_idxs = [self.weight_idxs[f"{tv}_{i}"] for i in range(num_bins)]
 
-            if self.tv == "response":
+            if self.tv == "response" or self.tv == "block_side":
                 self.tv_pos = "left"
                 self.tv_neg = "right"
 
@@ -519,6 +738,60 @@ class StrategyWeightRenderer:
         self.mx = max(np.max(self.weights_mb), np.max(self.weights_mf))
 
         self.relim=relim
+
+        self.save_subdir = save_subdir
+    
+    def __call__(self, idx, fig, axes):
+        ax = (
+            axes[0][0]
+            if np.ndim(axes) > 1
+            else (axes[0] if np.ndim(axes) > 0 else axes)
+        )
+        ax.clear()
+
+        ax = plot_trajectory(
+            x=self.weights_mb[:,idx],
+            y=self.weights_mf[:,idx],
+            x_ci=self.ci_mb[:,idx] if self.ci_mb is not None else None,
+            y_ci=self.ci_mf[:,idx] if self.ci_mb is not None else None,
+            xlabel=f'mb (- {self.neg}, + {self.pos})',
+            ylabel=f'mf (- {self.neg}, + {self.pos})',
+            title=rf"$\beta$ {self.regressor}",
+            ax=ax,
+        )
+
+        if not self.relim:
+            ax.set_ylim([self.mn, self.mx])
+            ax.set_xlim([self.mn, self.mx])
+
+class StrategyWeightAllRenderer:
+    def __init__(
+            self,
+            bootstrapper_mb=None,
+            bootstrapper_mf=None,
+            encoder_mb=None,
+            encoder_mf=None,
+            reg=None,
+            regressors=None,
+            values=None,
+            relim=False,
+            save_subdir="strategy_weights",
+    ):
+        self.renderers = []
+        for regressor in regressors:
+            self.renderers.extend(
+                StrategyWeightRenderer(
+                    bootstrapper_mb=bootstrapper_mb,
+                    bootstrapper_mf=bootstrapper_mf,
+                    encoder_mb=encoder_mb,
+                    encoder_mf=encoder_mf,
+                    reg=reg,
+                    regressor=regressor,
+                    values=values,
+                    relim=relim,
+                )
+            )
+        self.regressors = regressors
 
         self.save_subdir = save_subdir
     
